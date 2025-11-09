@@ -91,11 +91,7 @@ function parseDebitFormat(instruction) {
   if (afterDebit.length === 0) return null;
 
   const amountStr = extractWord(afterDebit, 0);
-  const amount = parseInt(amountStr, 10);
-  if (Number.isNaN(amount) || amount <= 0 || amountStr.includes('.')) {
-    return null; // Invalid amount
-  }
-  result.amount = amount;
+  result.amount = amountStr;
 
   // Extract currency (after amount)
   const afterAmount = afterDebit.substring(amountStr.length).trim();
@@ -165,11 +161,7 @@ function parseCreditFormat(instruction) {
   if (afterCredit.length === 0) return null;
 
   const amountStr = extractWord(afterCredit, 0);
-  const amount = parseInt(amountStr, 10);
-  if (Number.isNaN(amount) || amount <= 0 || amountStr.includes('.')) {
-    return null; // Invalid amount
-  }
-  result.amount = amount;
+  result.amount = amountStr;
 
   // Extract currency (after amount)
   const afterAmount = afterCredit.substring(amountStr.length).trim();
@@ -269,10 +261,12 @@ async function parseInstruction(serviceData) {
     parsed = parseCreditFormat(instruction);
   }
 
-  // If completely unparseable
+  // If completely unparseable (check if we got the basic structure)
+  // Note: amount might be invalid (negative/decimal), but we still got it, so continue
   if (
     !parsed ||
-    !parsed.amount ||
+    !parsed.amount || // amount could be invalid string, but should exist
+    parsed.amount === '' ||
     !parsed.currency ||
     !parsed.debitAccount ||
     !parsed.creditAccount
@@ -292,12 +286,40 @@ async function parseInstruction(serviceData) {
     return response;
   }
 
-  // Validate amount
-  if (!parsed.amount || parsed.amount <= 0 || !Number.isInteger(parsed.amount)) {
+  // Validate amount (now stored as string from parsing)
+  const amountStr = String(parsed.amount || '').trim();
+
+  // Check if amount is empty or invalid
+  if (!amountStr || amountStr.length === 0) {
     throwAppError(PaymentMessages.INVALID_AMOUNT, ERROR_CODE.INVLDDATA, {
       context: { status_code: STATUS_CODES.INVALID_AMOUNT },
     });
   }
+
+  // Check for negative sign
+  if (amountStr.includes('-')) {
+    throwAppError(PaymentMessages.INVALID_AMOUNT, ERROR_CODE.INVLDDATA, {
+      context: { status_code: STATUS_CODES.INVALID_AMOUNT },
+    });
+  }
+
+  // Check for decimal point
+  if (amountStr.includes('.')) {
+    throwAppError(PaymentMessages.INVALID_AMOUNT, ERROR_CODE.INVLDDATA, {
+      context: { status_code: STATUS_CODES.INVALID_AMOUNT },
+    });
+  }
+
+  // Convert to number and validate
+  const amount = parseInt(amountStr, 10);
+  if (Number.isNaN(amount) || amount <= 0) {
+    throwAppError(PaymentMessages.INVALID_AMOUNT, ERROR_CODE.INVLDDATA, {
+      context: { status_code: STATUS_CODES.INVALID_AMOUNT },
+    });
+  }
+
+  // Store validated amount as number
+  parsed.amount = amount;
 
   // Validate currency
   const currencyUpper = parsed.currency.toUpperCase();
