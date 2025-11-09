@@ -1,4 +1,4 @@
-const { parse, validate } = require('../validator');
+const { parse, validate } = require('@app-core/validator');
 
 const REDACT_FIELDS = {
   password: 1,
